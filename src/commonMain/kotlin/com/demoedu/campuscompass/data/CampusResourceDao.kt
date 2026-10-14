@@ -6,6 +6,7 @@ import androidx.room3.Insert
 import androidx.room3.Query
 import kotlinx.coroutines.flow.Flow
 
+/** Provides resource browsing, filtering, and building lookup operations for the UI. */
 @Dao
 interface CampusResourceDao {
     @Insert
@@ -37,6 +38,33 @@ interface CampusResourceDao {
 
     @Query("SELECT * FROM CampusResources WHERE campusName = :campusName ORDER BY buildingName")
     suspend fun getResourcesAtCampus(campusName: String): List<CampusResourceEntity>
+
+    @Query("SELECT DISTINCT campusName FROM CampusResources ORDER BY campusName")
+    // Supplies the campus choices shown in the resource filter.
+    fun observeCampusNames(): Flow<List<String>>
+
+    @Query("SELECT DISTINCT resourceType FROM CampusResources ORDER BY resourceType")
+    // Supplies the resource-type choices shown in the resource filter.
+    fun observeResourceTypes(): Flow<List<String>>
+
+    @Query(
+        """
+        SELECT * FROM CampusResources
+        WHERE (:campusName IS NULL OR campusName = :campusName)
+          AND (:resourceType IS NULL OR resourceType = :resourceType)
+          AND (
+              :buildingQuery = ''
+              OR buildingName LIKE '%' || :buildingQuery || '%'
+              OR buildingNumber LIKE '%' || :buildingQuery || '%'
+          )
+        ORDER BY campusName, buildingName, buildingNumber
+        """
+    )
+    suspend fun searchResources(
+        campusName: String?,
+        resourceType: String?,
+        buildingQuery: String,
+    ): List<CampusResourceEntity>
 
     @Query("SELECT * FROM CampusResources ORDER BY campusName, buildingName")
     fun observeResources(): Flow<List<CampusResourceEntity>>
