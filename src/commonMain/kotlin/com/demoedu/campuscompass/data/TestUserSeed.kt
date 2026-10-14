@@ -1,5 +1,6 @@
 package com.demoedu.campuscompass.data
 
+// These credentials are intentionally predictable for local demonstrations and automated checks.
 const val testUsername = "testuser"
 const val testPassword = "testpassword"
 

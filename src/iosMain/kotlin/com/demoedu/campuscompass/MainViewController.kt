@@ -10,8 +10,10 @@ import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSUserDomainMask
 
+/** Starts the iOS host with the shared database and persistent login store. */
 @OptIn(ExperimentalForeignApi::class)
 fun MainViewController() = ComposeUIViewController {
+    // The document directory is shared by the database and preferences across launches.
     val documentDirectory = NSFileManager.defaultManager.URLForDirectory(
         directory = NSDocumentDirectory,
         inDomain = NSUserDomainMask,

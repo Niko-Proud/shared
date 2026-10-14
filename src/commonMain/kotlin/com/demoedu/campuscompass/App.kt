@@ -1,39 +1,23 @@
 package com.demoedu.campuscompass
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.demoedu.campuscompass.data.CampusDatabase
+import com.demoedu.campuscompass.data.LoginSessionPersistence
+import com.demoedu.campuscompass.data.ensureTestUser
+import kotlinx.coroutines.launch
 
-/** Provides the shared app shell and switches between signed-out and signed-in content. */
+/** Provides the shared app shell, restores the saved login, and switches between app views. */
 @Composable
 fun App(
     database: CampusDatabase,
@@ -45,10 +29,10 @@ fun App(
             var sessionLoaded by remember { mutableStateOf(loginSessionStore == null) }
             val scope = rememberCoroutineScope()
 
-            // This makes the development account available without replacing existing users.
+            // The development account is added only when it does not already exist.
             LaunchedEffect(database) { ensureTestUser(database) }
 
-            // The first DataStore value decides whether the app opens at login or resources.
+            // Waiting for the first preference value prevents a saved login from flashing past.
             LaunchedEffect(loginSessionStore) {
                 if (loginSessionStore == null) {
                     sessionLoaded = true
@@ -60,21 +44,22 @@ fun App(
                 }
             }
 
-            if (!sessionLoaded) {
-                androidx.compose.material3.Text("Loading your session…")
-            } else if (signedInUserId == null) {
-                AuthScreen(
+            when {
+                !sessionLoaded -> Text("Loading your session...")
+                signedInUserId == null -> AuthScreen(
                     database = database,
-                    onSignedIn = {
-                        signedInUserId = it
-                        scope.launch { loginSessionStore?.saveSignedInUser(it) }
+                    onSignedIn = { userId ->
+                        signedInUserId = userId
+                        scope.launch { loginSessionStore?.saveSignedInUser(userId) }
                     },
                 )
-            } else {
-                ResourceScreen(
+                else -> ResourceScreen(
                     database = database,
                     userId = signedInUserId!!,
-                    onLogout = { signedInUserId = null },
+                    onLogout = {
+                        signedInUserId = null
+                        scope.launch { loginSessionStore?.clearSignedInUser() }
+                    },
                 )
             }
         }
