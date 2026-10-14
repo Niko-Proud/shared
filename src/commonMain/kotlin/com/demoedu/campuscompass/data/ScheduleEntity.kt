@@ -50,5 +50,11 @@ data class ScheduleWithResource(
     val resourceType: String,
     val resourceTag: String,
     val availability: Boolean,
-    val hoursOfOperation: List<String>,
+    val monday: String?,
+    val tuesday: String?,
+    val wednesday: String?,
+    val thursday: String?,
+    val friday: String?,
+    val saturday: String?,
+    val sunday: String?,
 )

@@ -3,13 +3,11 @@ package com.demoedu.campuscompass.data
 import androidx.room3.Entity
 import androidx.room3.Index
 import androidx.room3.PrimaryKey
-import androidx.room3.TypeConverters
 
 @Entity(
     tableName = "CampusResources",
     indices = [Index(value = ["resourceTag"], unique = true)],
 )
-@TypeConverters(HoursOfOperationConverter::class)
 data class CampusResourceEntity(
     @PrimaryKey(autoGenerate = true)
     val resourceId: Long = 0,
@@ -19,5 +17,4 @@ data class CampusResourceEntity(
     val resourceType: String,
     val resourceTag: String,
     val availability: Boolean = true,
-    val hoursOfOperation: List<String> = emptyList(),
 )

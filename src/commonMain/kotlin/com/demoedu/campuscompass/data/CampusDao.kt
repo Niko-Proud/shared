@@ -68,8 +68,36 @@ interface CampusDao {
     @Query("SELECT * FROM CampusResources ORDER BY campusName, buildingName")
     fun observeResources(): Flow<List<CampusResourceEntity>>
 
-    @Query("SELECT hoursOfOperation FROM CampusResources WHERE resourceId = :resourceId")
-    suspend fun getHoursOfOperation(resourceId: Long): List<String>?
+    // Resource hours: one row per resource with one column per day.
+    @Insert
+    suspend fun insertHours(hours: ResourceHoursEntity): Long
+
+    @Query("SELECT * FROM ResourceHours WHERE resourceId = :resourceId")
+    suspend fun getHours(resourceId: Long): ResourceHoursEntity?
+
+    @Query("SELECT resourceId FROM ResourceHours WHERE resourceId = :resourceId")
+    suspend fun getHoursResourceId(resourceId: Long): Long?
+
+    @Query("SELECT monday FROM ResourceHours WHERE resourceId = :resourceId")
+    suspend fun getMondayHours(resourceId: Long): String?
+
+    @Query("SELECT tuesday FROM ResourceHours WHERE resourceId = :resourceId")
+    suspend fun getTuesdayHours(resourceId: Long): String?
+
+    @Query("SELECT wednesday FROM ResourceHours WHERE resourceId = :resourceId")
+    suspend fun getWednesdayHours(resourceId: Long): String?
+
+    @Query("SELECT thursday FROM ResourceHours WHERE resourceId = :resourceId")
+    suspend fun getThursdayHours(resourceId: Long): String?
+
+    @Query("SELECT friday FROM ResourceHours WHERE resourceId = :resourceId")
+    suspend fun getFridayHours(resourceId: Long): String?
+
+    @Query("SELECT saturday FROM ResourceHours WHERE resourceId = :resourceId")
+    suspend fun getSaturdayHours(resourceId: Long): String?
+
+    @Query("SELECT sunday FROM ResourceHours WHERE resourceId = :resourceId")
+    suspend fun getSundayHours(resourceId: Long): String?
 
     // Schedules: each row belongs to one user and references one campus resource.
     @Insert
@@ -107,9 +135,12 @@ interface CampusDao {
         SELECT s.scheduleId, s.usrId, s.resourceId, s.scheduleName,
                s.dayOfWeek, s.startTime, s.endTime, s.notes,
                r.campusName, r.buildingName, r.buildingNumber,
-               r.resourceType, r.resourceTag, r.availability, r.hoursOfOperation
+               r.resourceType, r.resourceTag, r.availability,
+               h.monday, h.tuesday, h.wednesday, h.thursday,
+               h.friday, h.saturday, h.sunday
         FROM Schedules s
         INNER JOIN CampusResources r ON r.resourceId = s.resourceId
+        LEFT JOIN ResourceHours h ON h.resourceId = r.resourceId
         WHERE s.usrId = :usrId
         ORDER BY s.dayOfWeek, s.startTime
         """
