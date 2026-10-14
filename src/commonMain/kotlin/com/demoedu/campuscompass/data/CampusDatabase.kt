@@ -12,11 +12,13 @@ import androidx.room3.RoomDatabase
         ResourceHoursEntity::class,
         ScheduleEntity::class,
     ],
-    version = 4,
+    // Version 5 includes the database rule that each username must be unique.
+    version = 5,
     exportSchema = true,
 )
 @ConstructedBy(CampusDatabaseConstructor::class)
 abstract class CampusDatabase : RoomDatabase() {
+    // Provides the app's access point for users, resources, hours, and schedules.
     abstract fun campusDao(): CampusDao
 }
 

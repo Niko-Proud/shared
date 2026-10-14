@@ -7,6 +7,7 @@ import platform.Foundation.NSFileManager
 import platform.Foundation.NSUserDomainMask
 
 fun getCampusDatabaseBuilder(): RoomDatabase.Builder<CampusDatabase> {
+    // The app's document storage keeps the shared database available between launches.
     val documentDirectory = NSFileManager.defaultManager.URLForDirectory(
         directory = NSDocumentDirectory,
         inDomain = NSUserDomainMask,
@@ -15,6 +16,7 @@ fun getCampusDatabaseBuilder(): RoomDatabase.Builder<CampusDatabase> {
         error = null,
     )?.path ?: error("Unable to locate the iOS documents directory")
 
+    // A stable filename ensures the app continues using the same campus data.
     return Room.databaseBuilder<CampusDatabase>(
         name = "$documentDirectory/campus_compass.db",
     )
