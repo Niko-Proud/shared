@@ -1,7 +1,7 @@
 package com.demoedu.campuscompass.data
 
 import androidx.room3.migration.Migration
-import androidx.sqlite.executeSQL
+import androidx.sqlite.async.executeSQL
 
 /**
  * Keeps existing user data available as the database gains new capabilities.

@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -28,10 +28,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.demoedu.campuscompass.data.CampusDatabase
 import com.demoedu.campuscompass.data.CampusResourceEntity
 import com.demoedu.campuscompass.data.UserEntity
+import com.demoedu.campuscompass.data.createInMemoryCampusDatabase
 import kotlinx.coroutines.launch
 
 private enum class AuthMode { Login, CreateAccount }
@@ -51,8 +53,12 @@ fun App(database: CampusDatabase) {
 }
 
 @Composable
-private fun AuthScreen(database: CampusDatabase, onSignedIn: (Long) -> Unit) {
-    var mode by remember { mutableStateOf(AuthMode.Login) }
+private fun AuthScreen(
+    database: CampusDatabase,
+    onSignedIn: (Long) -> Unit,
+    initialMode: AuthMode = AuthMode.Login,
+) {
+    var mode by remember { mutableStateOf(initialMode) }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
@@ -183,5 +189,53 @@ private fun ResourceCard(resource: CampusResourceEntity) {
             Text("Type: ${resource.resourceType}")
             Text(if (resource.availability) "Available" else "Unavailable")
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun AuthScreenPreview() {
+    val database = remember { createInMemoryCampusDatabase() }
+    MaterialTheme {
+        AuthScreen(database = database, onSignedIn = {})
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun CreateAccountScreenPreview() {
+    val database = remember { createInMemoryCampusDatabase() }
+    MaterialTheme {
+        AuthScreen(
+            database = database,
+            onSignedIn = {},
+            initialMode = AuthMode.CreateAccount,
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ResourceScreenPreview() {
+    val database = remember { createInMemoryCampusDatabase() }
+    MaterialTheme {
+        ResourceScreen(database = database, userId = 1L, onLogout = {})
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ResourceCardPreview() {
+    MaterialTheme {
+        ResourceCard(
+            CampusResourceEntity(
+                campusName = "North Campus",
+                buildingName = "Library",
+                buildingNumber = "B-104",
+                resourceType = "Study Room",
+                resourceTag = "LIB-STUDY-104",
+                availability = true,
+            ),
+        )
     }
 }
