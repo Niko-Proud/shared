@@ -44,7 +44,10 @@ fun App(database: CampusDatabase) {
         Surface(modifier = Modifier.fillMaxSize()) {
             var signedInUserId by remember { mutableStateOf<Long?>(null) }
             if (signedInUserId == null) {
-                AuthScreen(database) { signedInUserId = it }
+                AuthScreen(
+                    database = database,
+                    onSignedIn = { signedInUserId = it },
+                )
             } else {
                 ResourceScreen(database, signedInUserId!!) { signedInUserId = null }
             }
@@ -105,15 +108,15 @@ private fun AuthScreen(
                             message = "Enter both a username and password."
                         }
                         mode == AuthMode.Login -> {
-                            val user = database.campusDao().findUser(cleanUsername)
+                            val user = database.userDao().findUser(cleanUsername)
                             if (user != null && user.password == password) onSignedIn(user.usrId)
                             else message = "Username or password is incorrect."
                         }
                         else -> {
-                            if (database.campusDao().findUser(cleanUsername) != null) {
+                            if (database.userDao().findUser(cleanUsername) != null) {
                                 message = "That username is already in use."
                             } else {
-                                val userId = database.campusDao().insertUser(
+                                val userId = database.userDao().insertUser(
                                     UserEntity(username = cleanUsername, password = password),
                                 )
                                 onSignedIn(userId)
@@ -145,11 +148,11 @@ private fun AuthScreen(
 
 @Composable
 private fun ResourceScreen(database: CampusDatabase, userId: Long, onLogout: () -> Unit) {
-    val resources by database.campusDao().observeResources().collectAsState(initial = emptyList())
+    val resources by database.campusResourceDao().observeResources().collectAsState(initial = emptyList())
     var username by remember { mutableStateOf("User") }
 
     LaunchedEffect(userId) {
-        username = database.campusDao().getUsername(userId) ?: "User"
+        username = database.userDao().getUsername(userId) ?: "User"
     }
 
     Column(

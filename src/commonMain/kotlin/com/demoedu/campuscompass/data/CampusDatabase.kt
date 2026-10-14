@@ -18,8 +18,11 @@ import androidx.room3.RoomDatabase
 )
 @ConstructedBy(CampusDatabaseConstructor::class)
 abstract class CampusDatabase : RoomDatabase() {
-    // Provides the app's access point for users, resources, hours, and schedules.
-    abstract fun campusDao(): CampusDao
+    // Each DAO keeps one entity's reads and writes together.
+    abstract fun userDao(): UserDao
+    abstract fun campusResourceDao(): CampusResourceDao
+    abstract fun resourceHoursDao(): ResourceHoursDao
+    abstract fun scheduleDao(): ScheduleDao
 }
 
 @Suppress("KotlinNoActualForExpect")
