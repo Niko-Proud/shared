@@ -20,6 +20,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,214 +32,51 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.demoedu.campuscompass.data.CampusDatabase
-import com.demoedu.campuscompass.data.CampusResourceEntity
-import com.demoedu.campuscompass.data.UserEntity
-import com.demoedu.campuscompass.data.createInMemoryCampusDatabase
-import kotlinx.coroutines.launch
 
-private enum class AuthMode { Login, CreateAccount }
-
+/** Provides the shared app shell and switches between signed-out and signed-in content. */
 @Composable
-fun App(database: CampusDatabase) {
+fun App(
+    database: CampusDatabase,
+    loginSessionStore: LoginSessionPersistence? = null,
+) {
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             var signedInUserId by remember { mutableStateOf<Long?>(null) }
-            if (signedInUserId == null) {
-                AuthScreen(
-                    database = database,
-                    onSignedIn = { signedInUserId = it },
-                )
-            } else {
-                ResourceScreen(database, signedInUserId!!) { signedInUserId = null }
-            }
-        }
-    }
-}
+            var sessionLoaded by remember { mutableStateOf(loginSessionStore == null) }
+            val scope = rememberCoroutineScope()
 
-@Composable
-private fun AuthScreen(
-    database: CampusDatabase,
-    onSignedIn: (Long) -> Unit,
-    initialMode: AuthMode = AuthMode.Login,
-) {
-    var mode by remember { mutableStateOf(initialMode) }
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var message by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
+            // This makes the development account available without replacing existing users.
+            LaunchedEffect(database) { ensureTestUser(database) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text("Campus Compass", style = MaterialTheme.typography.headlineMedium)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            if (mode == AuthMode.Login) "Log in to view campus resources."
-            else "Create an account to save your campus schedule.",
-        )
-        Spacer(Modifier.height(24.dp))
-        OutlinedTextField(
-            value = username,
-            onValueChange = { username = it; message = null },
-            label = { Text("Username") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it; message = null },
-            label = { Text("Password") },
-            visualTransformation = PasswordVisualTransformation(),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(16.dp))
-        Button(
-            onClick = {
-                scope.launch {
-                    val cleanUsername = username.trim()
-                    when {
-                        cleanUsername.isEmpty() || password.isEmpty() -> {
-                            message = "Enter both a username and password."
-                        }
-                        mode == AuthMode.Login -> {
-                            val user = database.userDao().findUser(cleanUsername)
-                            if (user != null && user.password == password) onSignedIn(user.usrId)
-                            else message = "Username or password is incorrect."
-                        }
-                        else -> {
-                            if (database.userDao().findUser(cleanUsername) != null) {
-                                message = "That username is already in use."
-                            } else {
-                                val userId = database.userDao().insertUser(
-                                    UserEntity(username = cleanUsername, password = password),
-                                )
-                                onSignedIn(userId)
-                            }
-                        }
+            // The first DataStore value decides whether the app opens at login or resources.
+            LaunchedEffect(loginSessionStore) {
+                if (loginSessionStore == null) {
+                    sessionLoaded = true
+                } else {
+                    loginSessionStore.signedInUserId.collect { savedUserId ->
+                        signedInUserId = savedUserId
+                        sessionLoaded = true
                     }
                 }
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (mode == AuthMode.Login) "Log in" else "Create account")
-        }
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(
-            onClick = {
-                mode = if (mode == AuthMode.Login) AuthMode.CreateAccount else AuthMode.Login
-                message = null
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (mode == AuthMode.Login) "Create an account" else "Back to login")
-        }
-        message?.let {
-            Spacer(Modifier.height(16.dp))
-            Text(it, color = MaterialTheme.colorScheme.error)
-        }
-    }
-}
-
-@Composable
-private fun ResourceScreen(database: CampusDatabase, userId: Long, onLogout: () -> Unit) {
-    val resources by database.campusResourceDao().observeResources().collectAsState(initial = emptyList())
-    var username by remember { mutableStateOf("User") }
-
-    LaunchedEffect(userId) {
-        username = database.userDao().getUsername(userId) ?: "User"
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(20.dp)
-            .verticalScroll(rememberScrollState()),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column {
-                Text("Welcome, $username", style = MaterialTheme.typography.headlineSmall)
-                Text("Campus resources")
             }
-            OutlinedButton(onClick = onLogout) { Text("Log out") }
-        }
-        Spacer(Modifier.height(20.dp))
-        if (resources.isEmpty()) {
-            Text("No campus resources have been added yet.")
-        } else {
-            resources.forEach { resource ->
-                ResourceCard(resource)
-                Spacer(Modifier.height(12.dp))
+
+            if (!sessionLoaded) {
+                androidx.compose.material3.Text("Loading your session…")
+            } else if (signedInUserId == null) {
+                AuthScreen(
+                    database = database,
+                    onSignedIn = {
+                        signedInUserId = it
+                        scope.launch { loginSessionStore?.saveSignedInUser(it) }
+                    },
+                )
+            } else {
+                ResourceScreen(
+                    database = database,
+                    userId = signedInUserId!!,
+                    onLogout = { signedInUserId = null },
+                )
             }
         }
-    }
-}
-
-@Composable
-private fun ResourceCard(resource: CampusResourceEntity) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(resource.resourceTag, style = MaterialTheme.typography.titleMedium)
-            Text("${resource.buildingName} ${resource.buildingNumber} · ${resource.campusName}")
-            Text("Type: ${resource.resourceType}")
-            Text(if (resource.availability) "Available" else "Unavailable")
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun AuthScreenPreview() {
-    val database = remember { createInMemoryCampusDatabase() }
-    MaterialTheme {
-        AuthScreen(database = database, onSignedIn = {})
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun CreateAccountScreenPreview() {
-    val database = remember { createInMemoryCampusDatabase() }
-    MaterialTheme {
-        AuthScreen(
-            database = database,
-            onSignedIn = {},
-            initialMode = AuthMode.CreateAccount,
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun ResourceScreenPreview() {
-    val database = remember { createInMemoryCampusDatabase() }
-    MaterialTheme {
-        ResourceScreen(database = database, userId = 1L, onLogout = {})
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun ResourceCardPreview() {
-    MaterialTheme {
-        ResourceCard(
-            CampusResourceEntity(
-                campusName = "North Campus",
-                buildingName = "Library",
-                buildingNumber = "B-104",
-                resourceType = "Study Room",
-                resourceTag = "LIB-STUDY-104",
-                availability = true,
-            ),
-        )
     }
 }
