@@ -18,6 +18,8 @@ internal fun ResourceCard(resource: CampusResourceEntity, hours: ResourceHoursEn
             Text("Campus: ${resource.campusName}")
             Text("Resource type: ${resource.resourceType}")
             Text("Available: ${resource.availability}")
+            if (resource.description.isNotBlank()) Text(resource.description)
+            resource.officialUrl?.let { Text("Official information: $it") }
             hours?.let {
                 // Hours are optional because a resource may be imported before its schedule.
                 Text("Monday: ${it.monday}")

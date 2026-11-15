@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.demoedu.campuscompass.data.CampusDatabase
+import com.demoedu.campuscompass.data.CampusMapEntity
 import com.demoedu.campuscompass.data.CampusResourceEntity
 import com.demoedu.campuscompass.data.ResourceHoursEntity
 import kotlinx.coroutines.launch
@@ -41,6 +42,7 @@ internal fun ResourceScreen(database: CampusDatabase, userId: Long, onLogout: ()
     val dao = database.campusResourceDao()
     val campuses by dao.observeCampusNames().collectAsState(emptyList())
     val types by dao.observeResourceTypes().collectAsState(emptyList())
+    val maps by database.campusMapDao().observeMaps().collectAsState(emptyList())
     var campus by remember { mutableStateOf<String?>(null) }
     var type by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
@@ -57,6 +59,10 @@ internal fun ResourceScreen(database: CampusDatabase, userId: Long, onLogout: ()
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column { Text("Welcome, $username"); Text("Campus resources") }
             OutlinedButton(onClick = onLogout, modifier = Modifier.testTag("resource_logout")) { Text("Log out") }
+        }
+        if (maps.isNotEmpty()) {
+            Text("Campus maps")
+            maps.forEach { CampusMapCard(it) }
         }
         // These dropdowns are populated from distinct database values, so the UI stays data-driven.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -76,6 +82,16 @@ internal fun ResourceScreen(database: CampusDatabase, userId: Long, onLogout: ()
         Spacer(Modifier.height(12.dp))
         if (results.isEmpty()) Text("No matching resources were found.")
         results.forEach { ResourceCard(it.resource, it.hours) }
+    }
+}
+
+/** Keeps map links next to the resource search so students can orient themselves before browsing. */
+@Composable
+private fun CampusMapCard(map: CampusMapEntity) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(map.mapName)
+        Text(map.description)
+        Text("Map: ${map.officialUrl}")
     }
 }
 

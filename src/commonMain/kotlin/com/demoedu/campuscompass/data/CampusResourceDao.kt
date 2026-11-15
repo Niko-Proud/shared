@@ -3,6 +3,7 @@ package com.demoedu.campuscompass.data
 import androidx.room3.Dao
 import androidx.room3.Delete
 import androidx.room3.Insert
+import androidx.room3.Update
 import androidx.room3.Query
 import kotlinx.coroutines.flow.Flow
 
@@ -12,8 +13,14 @@ interface CampusResourceDao {
     @Insert
     suspend fun insertResource(resource: CampusResourceEntity): Long
 
+    @Update
+    suspend fun updateResource(resource: CampusResourceEntity)
+
     @Query("SELECT resourceId FROM CampusResources WHERE resourceId = :resourceId")
     suspend fun getResourceId(resourceId: Long): Long?
+
+    @Query("SELECT resourceId FROM CampusResources WHERE resourceTag = :resourceTag")
+    suspend fun getResourceIdByTag(resourceTag: String): Long?
 
     @Query("SELECT campusName FROM CampusResources WHERE resourceId = :resourceId")
     suspend fun getCampusName(resourceId: Long): String?

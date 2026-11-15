@@ -18,4 +18,7 @@ data class CampusResourceEntity(
     val resourceType: String, // Groups resources such as labs, study spaces, or services.
     val resourceTag: String, // Stable resource label used for unique resource lookup.
     val availability: Boolean = true, // Current availability shown on the resource card.
+    val description: String = "", // Optional user-facing explanation of the resource.
+    val imageResource: String? = null, // Optional Compose resource name, such as "logo".
+    val officialUrl: String? = null, // Optional official webpage for current details.
 )

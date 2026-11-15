@@ -11,9 +11,10 @@ import androidx.room3.RoomDatabase
         CampusResourceEntity::class,
         ResourceHoursEntity::class,
         ScheduleEntity::class,
+        CampusMapEntity::class,
     ],
-    // Version 5 includes the database rule that each username must be unique.
-    version = 5,
+    // Version 7 adds campus-wide maps alongside individual resource records.
+    version = 7,
     exportSchema = true,
 )
 @ConstructedBy(CampusDatabaseConstructor::class)
@@ -23,6 +24,7 @@ abstract class CampusDatabase : RoomDatabase() {
     abstract fun campusResourceDao(): CampusResourceDao
     abstract fun resourceHoursDao(): ResourceHoursDao
     abstract fun scheduleDao(): ScheduleDao
+    abstract fun campusMapDao(): CampusMapDao
 }
 
 @Suppress("KotlinNoActualForExpect")
