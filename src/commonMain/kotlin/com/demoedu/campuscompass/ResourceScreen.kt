@@ -1,6 +1,7 @@
 package com.demoedu.campuscompass
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,13 +26,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.demoedu.campuscompass.data.CampusDatabase
 import com.demoedu.campuscompass.data.CampusMapEntity
 import com.demoedu.campuscompass.data.CampusResourceEntity
 import com.demoedu.campuscompass.data.ResourceHoursEntity
+import campuscompass.shared.generated.resources.Res
+import campuscompass.shared.generated.resources.campus_map_cabrillo_aptos
+import campuscompass.shared.generated.resources.campus_map_csumb
+import campuscompass.shared.generated.resources.campus_map_gavilan_gilroy
+import campuscompass.shared.generated.resources.campus_map_hartnell_main
+import campuscompass.shared.generated.resources.campus_map_mpc_marina
+import campuscompass.shared.generated.resources.campus_map_mpc_monterey
+import campuscompass.shared.generated.resources.campus_map_mpc_pstc
+import campuscompass.shared.generated.resources.campus_map_ucsc
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.painterResource
 
 /**
  * Lets users narrow resources by campus or type, search for a building, and review
@@ -39,35 +51,31 @@ import kotlinx.coroutines.launch
  */
 @Composable
 internal fun ResourceScreen(database: CampusDatabase, userId: Long, onLogout: () -> Unit) {
+    val mapResourceType = "Maps"
     val dao = database.campusResourceDao()
     val campuses by dao.observeCampusNames().collectAsState(emptyList())
     val types by dao.observeResourceTypes().collectAsState(emptyList())
-    val maps by database.campusMapDao().observeMaps().collectAsState(emptyList())
+    val searchableTypes = remember(types) { (types + mapResourceType).distinct().sorted() }
     var campus by remember { mutableStateOf<String?>(null) }
     var type by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("User") }
     var results by remember { mutableStateOf<List<ResourceResult>>(emptyList()) }
+    var mapResults by remember { mutableStateOf<List<CampusMapEntity>>(emptyList()) }
+    var hasSearched by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     // The header identifies the signed-in user while the rest of the screen remains resource-focused.
     LaunchedEffect(userId) { username = database.userDao().getUsername(userId) ?: "User" }
-    // Show all resources on entry; the controls apply narrower queries on demand.
-    LaunchedEffect(Unit) { results = database.loadResourceResults(null, null, "") }
-
     Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column { Text("Welcome, $username"); Text("Campus resources") }
             OutlinedButton(onClick = onLogout, modifier = Modifier.testTag("resource_logout")) { Text("Log out") }
         }
-        if (maps.isNotEmpty()) {
-            Text("Campus maps")
-            maps.forEach { CampusMapCard(it) }
-        }
         // These dropdowns are populated from distinct database values, so the UI stays data-driven.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterDropdown("Campus", campus, campuses, { campus = it }, Modifier.weight(1f).testTag("resource_campus_filter"))
-            FilterDropdown("Resource type", type, types, { type = it }, Modifier.weight(1f).testTag("resource_type_filter"))
+            FilterDropdown("Resource type", type, searchableTypes, { type = it }, Modifier.weight(1f).testTag("resource_type_filter"))
         }
         OutlinedTextField(
             value = query,
@@ -77,21 +85,64 @@ internal fun ResourceScreen(database: CampusDatabase, userId: Long, onLogout: ()
         )
         // Building lookup is deliberately separate from the dropdown filters for direct searches.
         Button(onClick = {
-            scope.launch { results = database.loadResourceResults(campus, type, query.trim()) }
+            scope.launch {
+                if (type == mapResourceType) {
+                    // Maps live in their own table because they describe a campus, not a building.
+                    // Requiring a campus keeps a map search from mixing locations together.
+                    results = emptyList()
+                    mapResults = campus?.let { database.campusMapDao().getMapsAtCampus(it) } ?: emptyList()
+                } else {
+                    // Do not query until the user asks; an empty query would otherwise render the
+                    // entire multi-campus catalog immediately after sign-in.
+                    mapResults = emptyList()
+                    results = database.loadResourceResults(campus, type, query.trim())
+                }
+                hasSearched = true
+            }
         }, modifier = Modifier.fillMaxWidth().testTag("resource_search_submit")) { Text("Find resources") }
         Spacer(Modifier.height(12.dp))
-        if (results.isEmpty()) Text("No matching resources were found.")
-        results.forEach { ResourceCard(it.resource, it.hours) }
+        if (hasSearched && type == mapResourceType) {
+            if (campus == null) {
+                Text("Select a campus to find its map.")
+            } else if (mapResults.isEmpty()) {
+                Text("No maps were found for this campus.")
+            } else {
+                mapResults.forEach { CampusMapCard(it) }
+            }
+        } else {
+            if (hasSearched && results.isEmpty()) Text("No matching resources were found.")
+            results.forEach { ResourceCard(it.resource, it.hours) }
+        }
+
     }
 }
 
-/** Keeps map links next to the resource search so students can orient themselves before browsing. */
+/** Displays map metadata only after the user explicitly searches for the Maps resource type. */
 @Composable
 private fun CampusMapCard(map: CampusMapEntity) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(map.mapName)
         Text(map.description)
-        Text("Map: ${map.officialUrl}")
+        map.imageResource?.let { MapImage(it, map.mapName) }
+        Text("Official map: ${map.officialUrl}")
+    }
+}
+
+/**
+ * Resolves the database's stable image name to a generated Compose resource accessor.
+ * Keeping this mapping explicit prevents a malformed database value from becoming a file path.
+ */
+@Composable
+private fun MapImage(imageResource: String, description: String) {
+    when (imageResource) {
+        "campus_map_csumb" -> Image(painterResource(Res.drawable.campus_map_csumb), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+        "campus_map_mpc_monterey" -> Image(painterResource(Res.drawable.campus_map_mpc_monterey), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+        "campus_map_mpc_marina" -> Image(painterResource(Res.drawable.campus_map_mpc_marina), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+        "campus_map_mpc_pstc" -> Image(painterResource(Res.drawable.campus_map_mpc_pstc), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+        "campus_map_cabrillo_aptos" -> Image(painterResource(Res.drawable.campus_map_cabrillo_aptos), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+        "campus_map_gavilan_gilroy" -> Image(painterResource(Res.drawable.campus_map_gavilan_gilroy), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+        "campus_map_hartnell_main" -> Image(painterResource(Res.drawable.campus_map_hartnell_main), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+        "campus_map_ucsc" -> Image(painterResource(Res.drawable.campus_map_ucsc), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
     }
 }
 

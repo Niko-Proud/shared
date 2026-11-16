@@ -23,8 +23,12 @@ import com.demoedu.campuscompass.data.CampusDatabase
 import com.demoedu.campuscompass.data.LoginSessionPersistence
 import com.demoedu.campuscompass.data.ensureCampusResources
 import com.demoedu.campuscompass.data.ensureCampusMaps
+import com.demoedu.campuscompass.data.ensureCabrilloResources
+import com.demoedu.campuscompass.data.ensureGavilanResources
+import com.demoedu.campuscompass.data.ensureHartnellResources
 import com.demoedu.campuscompass.data.ensureMpcResources
 import com.demoedu.campuscompass.data.ensureTestUser
+import com.demoedu.campuscompass.data.ensureUscResources
 import campuscompass.shared.generated.resources.Res
 import campuscompass.shared.generated.resources.campus_compass_banner
 import kotlinx.coroutines.launch
@@ -47,11 +51,16 @@ fun App(
                     var sessionLoaded by remember { mutableStateOf(loginSessionStore == null) }
                     val scope = rememberCoroutineScope()
 
-                    // The development account is added only when it does not already exist.
+                    // These seeds make the local demo useful immediately while preserving the
+                    // campus filter: each institution writes only rows carrying its own campus name.
                     LaunchedEffect(database) {
                         ensureTestUser(database)
                         ensureCampusResources(database)
                         ensureMpcResources(database)
+                        ensureCabrilloResources(database)
+                        ensureGavilanResources(database)
+                        ensureHartnellResources(database)
+                        ensureUscResources(database)
                         ensureCampusMaps(database)
                     }
 
