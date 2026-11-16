@@ -3,6 +3,7 @@ package com.demoedu.campuscompass.data
 import androidx.room3.Dao
 import androidx.room3.Delete
 import androidx.room3.Insert
+import androidx.room3.Update
 import androidx.room3.Query
 import kotlinx.coroutines.flow.Flow
 
@@ -12,8 +13,14 @@ interface CampusResourceDao {
     @Insert
     suspend fun insertResource(resource: CampusResourceEntity): Long
 
+    @Update
+    suspend fun updateResource(resource: CampusResourceEntity)
+
     @Query("SELECT resourceId FROM CampusResources WHERE resourceId = :resourceId")
     suspend fun getResourceId(resourceId: Long): Long?
+
+    @Query("SELECT resourceId FROM CampusResources WHERE resourceTag = :resourceTag")
+    suspend fun getResourceIdByTag(resourceTag: String): Long?
 
     @Query("SELECT campusName FROM CampusResources WHERE resourceId = :resourceId")
     suspend fun getCampusName(resourceId: Long): String?
@@ -39,14 +46,15 @@ interface CampusResourceDao {
     @Query("SELECT * FROM CampusResources WHERE campusName = :campusName ORDER BY buildingName")
     suspend fun getResourcesAtCampus(campusName: String): List<CampusResourceEntity>
 
+    /** Supplies the campus choices displayed by the resource filter. */
     @Query("SELECT DISTINCT campusName FROM CampusResources ORDER BY campusName")
-    // Supplies the campus choices shown in the resource filter.
     fun observeCampusNames(): Flow<List<String>>
 
+    /** Supplies the resource-type choices displayed by the resource filter. */
     @Query("SELECT DISTINCT resourceType FROM CampusResources ORDER BY resourceType")
-    // Supplies the resource-type choices shown in the resource filter.
     fun observeResourceTypes(): Flow<List<String>>
 
+    /** Applies the selected filters and building search in one database query. */
     @Query(
         """
         SELECT * FROM CampusResources

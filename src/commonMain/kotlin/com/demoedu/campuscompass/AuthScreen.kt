@@ -7,22 +7,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.demoedu.campuscompass.data.CampusDatabase
 
-/** Chooses between the standalone login and account-creation views. */
+/** Coordinates the two authentication views without moving database work into the app shell. */
 @Composable
 internal fun AuthScreen(database: CampusDatabase, onSignedIn: (Long) -> Unit) {
+    // Keeping this choice local lets the user return to login without losing app-level state.
     var showSignup by remember { mutableStateOf(false) }
-
     if (showSignup) {
-        SignupScreen(
-            database = database,
-            onSignedIn = onSignedIn,
-            onBackToLogin = { showSignup = false },
-        )
+        SignupScreen(database, onSignedIn, onBackToLogin = { showSignup = false })
     } else {
-        LoginScreen(
-            database = database,
-            onSignedIn = onSignedIn,
-            onCreateAccount = { showSignup = true },
-        )
+        LoginScreen(database, onSignedIn, onCreateAccount = { showSignup = true })
     }
 }

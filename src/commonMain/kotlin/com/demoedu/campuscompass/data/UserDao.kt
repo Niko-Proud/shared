@@ -4,6 +4,7 @@ import androidx.room3.Dao
 import androidx.room3.Insert
 import androidx.room3.Query
 
+/** Provides account creation, login lookup, and profile update operations. */
 @Dao
 interface UserDao {
     @Insert

@@ -1,7 +1,7 @@
 package com.demoedu.campuscompass
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedButton
@@ -27,14 +26,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.demoedu.campuscompass.data.CampusDatabase
+import com.demoedu.campuscompass.data.CampusMapEntity
 import com.demoedu.campuscompass.data.CampusResourceEntity
 import com.demoedu.campuscompass.data.ResourceHoursEntity
-import com.demoedu.campuscompass.data.createInMemoryCampusDatabase
+import campuscompass.shared.generated.resources.Res
+import campuscompass.shared.generated.resources.campus_map_cabrillo_aptos
+import campuscompass.shared.generated.resources.campus_map_csumb
+import campuscompass.shared.generated.resources.campus_map_gavilan_gilroy
+import campuscompass.shared.generated.resources.campus_map_hartnell_main
+import campuscompass.shared.generated.resources.campus_map_mpc_marina
+import campuscompass.shared.generated.resources.campus_map_mpc_monterey
+import campuscompass.shared.generated.resources.campus_map_mpc_pstc
+import campuscompass.shared.generated.resources.campus_map_ucsc
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.painterResource
 
 /**
  * Lets users narrow resources by campus or type, search for a building, and review
@@ -42,137 +51,126 @@ import kotlinx.coroutines.launch
  */
 @Composable
 internal fun ResourceScreen(database: CampusDatabase, userId: Long, onLogout: () -> Unit) {
-    val campusNames by database.campusResourceDao().observeCampusNames().collectAsState(initial = emptyList())
-    val resourceTypes by database.campusResourceDao().observeResourceTypes().collectAsState(initial = emptyList())
+    val mapResourceType = "Maps"
+    val dao = database.campusResourceDao()
+    val campuses by dao.observeCampusNames().collectAsState(emptyList())
+    val types by dao.observeResourceTypes().collectAsState(emptyList())
+    val searchableTypes = remember(types) { (types + mapResourceType).distinct().sorted() }
+    var campus by remember { mutableStateOf<String?>(null) }
+    var type by remember { mutableStateOf<String?>(null) }
+    var query by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("User") }
-    var selectedCampus by remember { mutableStateOf<String?>(null) }
-    var selectedResourceType by remember { mutableStateOf<String?>(null) }
-    var buildingQuery by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<ResourceResult>>(emptyList()) }
+    var mapResults by remember { mutableStateOf<List<CampusMapEntity>>(emptyList()) }
+    var hasSearched by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(userId) {
-        username = database.userDao().getUsername(userId) ?: "User"
-    }
-
-    LaunchedEffect(Unit) {
-        results = database.loadResourceResults(null, null, "")
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(20.dp)
-            .verticalScroll(rememberScrollState()),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column {
-                Text("Welcome, $username", style = MaterialTheme.typography.headlineSmall)
-                Text("Campus resources")
-            }
-            OutlinedButton(onClick = onLogout, modifier = Modifier.testTag("resource_logout")) {
-                Text("Log out")
-            }
+    // The header identifies the signed-in user while the rest of the screen remains resource-focused.
+    LaunchedEffect(userId) { username = database.userDao().getUsername(userId) ?: "User" }
+    Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column { Text("Welcome, $username"); Text("Campus resources") }
+            OutlinedButton(onClick = onLogout, modifier = Modifier.testTag("resource_logout")) { Text("Log out") }
         }
-        Spacer(Modifier.height(20.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ResourceFilterDropdown(
-                label = "Campus",
-                selectedValue = selectedCampus,
-                options = campusNames,
-                onSelected = { selectedCampus = it },
-                modifier = Modifier.weight(1f).testTag("resource_campus_filter"),
-            )
-            ResourceFilterDropdown(
-                label = "Resource type",
-                selectedValue = selectedResourceType,
-                options = resourceTypes,
-                onSelected = { selectedResourceType = it },
-                modifier = Modifier.weight(1f).testTag("resource_type_filter"),
-            )
+        // These dropdowns are populated from distinct database values, so the UI stays data-driven.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterDropdown("Campus", campus, campuses, { campus = it }, Modifier.weight(1f).testTag("resource_campus_filter"))
+            FilterDropdown("Resource type", type, searchableTypes, { type = it }, Modifier.weight(1f).testTag("resource_type_filter"))
         }
-        Spacer(Modifier.height(12.dp))
         OutlinedTextField(
-            value = buildingQuery,
-            onValueChange = { buildingQuery = it },
+            value = query,
+            onValueChange = { query = it },
             label = { Text("Search building name or number") },
-            singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("resource_building_search"),
         )
-        Spacer(Modifier.height(12.dp))
+        // Building lookup is deliberately separate from the dropdown filters for direct searches.
         Button(onClick = {
             scope.launch {
-                results = database.loadResourceResults(
-                    selectedCampus,
-                    selectedResourceType,
-                    buildingQuery.trim(),
-                )
+                if (type == mapResourceType) {
+                    // Maps live in their own table because they describe a campus, not a building.
+                    // Requiring a campus keeps a map search from mixing locations together.
+                    results = emptyList()
+                    mapResults = campus?.let { database.campusMapDao().getMapsAtCampus(it) } ?: emptyList()
+                } else {
+                    // Do not query until the user asks; an empty query would otherwise render the
+                    // entire multi-campus catalog immediately after sign-in.
+                    mapResults = emptyList()
+                    results = database.loadResourceResults(campus, type, query.trim())
+                }
+                hasSearched = true
             }
-        }, modifier = Modifier.fillMaxWidth().testTag("resource_search_submit")) {
-            Text("Find resources")
-        }
-        Spacer(Modifier.height(20.dp))
-        if (results.isEmpty()) {
-            Text("No matching resources were found.")
+        }, modifier = Modifier.fillMaxWidth().testTag("resource_search_submit")) { Text("Find resources") }
+        Spacer(Modifier.height(12.dp))
+        if (hasSearched && type == mapResourceType) {
+            if (campus == null) {
+                Text("Select a campus to find its map.")
+            } else if (mapResults.isEmpty()) {
+                Text("No maps were found for this campus.")
+            } else {
+                mapResults.forEach { CampusMapCard(it) }
+            }
         } else {
-            results.forEach { result ->
-                ResourceCard(result.resource, result.hours)
-                Spacer(Modifier.height(12.dp))
-            }
+            if (hasSearched && results.isEmpty()) Text("No matching resources were found.")
+            results.forEach { ResourceCard(it.resource, it.hours) }
         }
+
     }
 }
 
-private data class ResourceResult(
-    val resource: CampusResourceEntity,
-    val hours: ResourceHoursEntity?,
-)
+/** Displays map metadata only after the user explicitly searches for the Maps resource type. */
+@Composable
+private fun CampusMapCard(map: CampusMapEntity) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(map.mapName)
+        Text(map.description)
+        map.imageResource?.let { MapImage(it, map.mapName) }
+        Text("Official map: ${map.officialUrl}")
+    }
+}
 
-private suspend fun CampusDatabase.loadResourceResults(
-    campusName: String?,
-    resourceType: String?,
-    buildingQuery: String,
-): List<ResourceResult> {
-    val resources = campusResourceDao().searchResources(campusName, resourceType, buildingQuery)
-    return resources.map { resource ->
+/**
+ * Resolves the database's stable image name to a generated Compose resource accessor.
+ * Keeping this mapping explicit prevents a malformed database value from becoming a file path.
+ */
+@Composable
+private fun MapImage(imageResource: String, description: String) {
+    when (imageResource) {
+        "campus_map_csumb" -> Image(painterResource(Res.drawable.campus_map_csumb), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+        "campus_map_mpc_monterey" -> Image(painterResource(Res.drawable.campus_map_mpc_monterey), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+        "campus_map_mpc_marina" -> Image(painterResource(Res.drawable.campus_map_mpc_marina), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+        "campus_map_mpc_pstc" -> Image(painterResource(Res.drawable.campus_map_mpc_pstc), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+        "campus_map_cabrillo_aptos" -> Image(painterResource(Res.drawable.campus_map_cabrillo_aptos), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+        "campus_map_gavilan_gilroy" -> Image(painterResource(Res.drawable.campus_map_gavilan_gilroy), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+        "campus_map_hartnell_main" -> Image(painterResource(Res.drawable.campus_map_hartnell_main), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+        "campus_map_ucsc" -> Image(painterResource(Res.drawable.campus_map_ucsc), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+private data class ResourceResult(val resource: CampusResourceEntity, val hours: ResourceHoursEntity?)
+
+private suspend fun CampusDatabase.loadResourceResults(campus: String?, type: String?, query: String): List<ResourceResult> =
+    // The hours lookup is kept beside each resource so cards can render complete building details.
+    campusResourceDao().searchResources(campus, type, query).map { resource ->
         ResourceResult(resource, resourceHoursDao().getHours(resource.resourceId))
     }
-}
 
 @Composable
-private fun ResourceFilterDropdown(
+private fun FilterDropdown(
     label: String,
-    selectedValue: String?,
+    selected: String?,
     options: List<String>,
     onSelected: (String?) -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Box(modifier = modifier) {
-        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-            Text(selectedValue ?: "All $label")
-        }
+    // The menu changes only the selected filter; the parent performs the next database query.
+    Column(modifier) {
+        OutlinedButton(onClick = { expanded = true }, Modifier.fillMaxWidth()) { Text(selected ?: "All $label") }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text("All $label") },
-                onClick = { onSelected(null); expanded = false },
-            )
+            DropdownMenuItem(text = { Text("All $label") }, onClick = { onSelected(null); expanded = false })
             options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option) },
-                    onClick = { onSelected(option); expanded = false },
-                )
+                DropdownMenuItem(text = { Text(option) }, onClick = { onSelected(option); expanded = false })
             }
         }
     }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun ResourceScreenPreview() {
-    val database = remember { createInMemoryCampusDatabase() }
-    MaterialTheme { ResourceScreen(database = database, userId = 1L, onLogout = {}) }
 }

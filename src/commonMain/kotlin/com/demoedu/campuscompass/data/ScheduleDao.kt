@@ -4,6 +4,7 @@ import androidx.room3.Dao
 import androidx.room3.Insert
 import androidx.room3.Query
 
+/** Provides user-owned schedule operations and the resource join used by schedule views. */
 @Dao
 interface ScheduleDao {
     @Insert
