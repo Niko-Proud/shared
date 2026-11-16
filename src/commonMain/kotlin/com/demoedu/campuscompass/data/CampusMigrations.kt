@@ -48,4 +48,30 @@ val CampusMigrations: Array<Migration> = arrayOf(
             "CREATE UNIQUE INDEX IF NOT EXISTS index_CampusMaps_campusName_mapType ON CampusMaps(campusName, mapType)",
         )
     },
+    Migration(7, 8) { connection ->
+        // Aliases are separate rows because a building can have multiple public names. This keeps
+        // aliases searchable without parsing a comma-separated value in every resource query.
+        connection.executeSQL(
+            """
+            CREATE TABLE IF NOT EXISTS CampusResourceAliases (
+                aliasId INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                resourceId INTEGER NOT NULL,
+                alias TEXT NOT NULL
+            )
+            """.trimIndent(),
+        )
+        connection.executeSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS index_CampusResourceAliases_resourceId_alias ON CampusResourceAliases(resourceId, alias)",
+        )
+        connection.executeSQL(
+            "CREATE INDEX IF NOT EXISTS index_CampusResourceAliases_alias ON CampusResourceAliases(alias)",
+        )
+    },
+    Migration(8, 9) { connection ->
+        // Campus is the first filter in the resource screen. This index keeps the database from
+        // scanning every institution as the catalog grows beyond the current local fixture.
+        connection.executeSQL(
+            "CREATE INDEX IF NOT EXISTS index_CampusResources_campusName ON CampusResources(campusName)",
+        )
+    },
 )

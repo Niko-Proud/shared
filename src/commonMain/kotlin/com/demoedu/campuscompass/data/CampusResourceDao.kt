@@ -43,6 +43,7 @@ interface CampusResourceDao {
     @Query("SELECT DISTINCT resourceTag FROM CampusResources ORDER BY resourceTag")
     suspend fun getUniqueResourceTags(): List<String>
 
+    /** Returns a campus-scoped directory for callers that need all buildings, not a search. */
     @Query("SELECT * FROM CampusResources WHERE campusName = :campusName ORDER BY buildingName")
     suspend fun getResourcesAtCampus(campusName: String): List<CampusResourceEntity>
 
@@ -64,6 +65,11 @@ interface CampusResourceDao {
               :buildingQuery = ''
               OR buildingName LIKE '%' || :buildingQuery || '%'
               OR buildingNumber LIKE '%' || :buildingQuery || '%'
+              OR EXISTS (
+                  SELECT 1 FROM CampusResourceAliases aliases
+                  WHERE aliases.resourceId = CampusResources.resourceId
+                    AND aliases.alias LIKE '%' || :buildingQuery || '%'
+              )
           )
         ORDER BY campusName, buildingName, buildingNumber
         """

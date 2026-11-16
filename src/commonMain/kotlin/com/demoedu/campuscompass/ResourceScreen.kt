@@ -1,6 +1,7 @@
 package com.demoedu.campuscompass
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -26,9 +28,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.input.pointer.pointerInput
 import com.demoedu.campuscompass.data.CampusDatabase
 import com.demoedu.campuscompass.data.CampusMapEntity
 import com.demoedu.campuscompass.data.CampusResourceEntity
@@ -51,6 +57,9 @@ import org.jetbrains.compose.resources.painterResource
  */
 @Composable
 internal fun ResourceScreen(database: CampusDatabase, userId: Long, onLogout: () -> Unit) {
+    // Maps are intentionally a separate search mode. They are campus-level reference material,
+    // not building resources, so keeping their results separate prevents map metadata from
+    // appearing in the normal resource list before the user asks for it.
     val mapResourceType = "Maps"
     val dao = database.campusResourceDao()
     val campuses by dao.observeCampusNames().collectAsState(emptyList())
@@ -62,6 +71,8 @@ internal fun ResourceScreen(database: CampusDatabase, userId: Long, onLogout: ()
     var username by remember { mutableStateOf("User") }
     var results by remember { mutableStateOf<List<ResourceResult>>(emptyList()) }
     var mapResults by remember { mutableStateOf<List<CampusMapEntity>>(emptyList()) }
+    // This flag distinguishes the initial screen from a legitimate search with zero matches.
+    // Without it, an empty result list would look like a failed query immediately after login.
     var hasSearched by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -123,6 +134,8 @@ private fun CampusMapCard(map: CampusMapEntity) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(map.mapName)
         Text(map.description)
+        // The database stores a stable resource name rather than a file path. MapImage resolves
+        // that name through generated Compose accessors and safely ignores unknown values.
         map.imageResource?.let { MapImage(it, map.mapName) }
         Text("Official map: ${map.officialUrl}")
     }
@@ -134,22 +147,95 @@ private fun CampusMapCard(map: CampusMapEntity) {
  */
 @Composable
 private fun MapImage(imageResource: String, description: String) {
-    when (imageResource) {
-        "campus_map_csumb" -> Image(painterResource(Res.drawable.campus_map_csumb), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
-        "campus_map_mpc_monterey" -> Image(painterResource(Res.drawable.campus_map_mpc_monterey), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
-        "campus_map_mpc_marina" -> Image(painterResource(Res.drawable.campus_map_mpc_marina), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
-        "campus_map_mpc_pstc" -> Image(painterResource(Res.drawable.campus_map_mpc_pstc), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
-        "campus_map_cabrillo_aptos" -> Image(painterResource(Res.drawable.campus_map_cabrillo_aptos), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
-        "campus_map_gavilan_gilroy" -> Image(painterResource(Res.drawable.campus_map_gavilan_gilroy), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
-        "campus_map_hartnell_main" -> Image(painterResource(Res.drawable.campus_map_hartnell_main), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
-        "campus_map_ucsc" -> Image(painterResource(Res.drawable.campus_map_ucsc), description, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth())
+    val painter = when (imageResource) {
+        "campus_map_csumb" -> painterResource(Res.drawable.campus_map_csumb)
+        "campus_map_mpc_monterey" -> painterResource(Res.drawable.campus_map_mpc_monterey)
+        "campus_map_mpc_marina" -> painterResource(Res.drawable.campus_map_mpc_marina)
+        "campus_map_mpc_pstc" -> painterResource(Res.drawable.campus_map_mpc_pstc)
+        "campus_map_cabrillo_aptos" -> painterResource(Res.drawable.campus_map_cabrillo_aptos)
+        "campus_map_gavilan_gilroy" -> painterResource(Res.drawable.campus_map_gavilan_gilroy)
+        "campus_map_hartnell_main" -> painterResource(Res.drawable.campus_map_hartnell_main)
+        "campus_map_ucsc" -> painterResource(Res.drawable.campus_map_ucsc)
+        else -> null
+    }
+    if (painter == null) return
+
+    // Scale and translation belong to this map card, so each displayed campus map can be explored
+    // independently instead of one map's zoom level affecting every result on the screen.
+    var scale by remember { mutableStateOf(1f) }
+    var offsetX by remember { mutableStateOf(0f) }
+    var offsetY by remember { mutableStateOf(0f) }
+
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { scale = (scale + 0.5f).coerceAtMost(5f) },
+                modifier = Modifier.testTag("map_zoom_in"),
+            ) { Text("+") }
+            OutlinedButton(
+                onClick = {
+                    scale = (scale - 0.5f).coerceAtLeast(1f)
+                    if (scale == 1f) {
+                        offsetX = 0f
+                        offsetY = 0f
+                    }
+                },
+                modifier = Modifier.testTag("map_zoom_out"),
+            ) { Text("−") }
+            OutlinedButton(
+                onClick = {
+                    scale = 1f
+                    offsetX = 0f
+                    offsetY = 0f
+                },
+                modifier = Modifier.testTag("map_zoom_reset"),
+            ) { Text("Reset") }
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(420.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .pointerInput(Unit) {
+                    // This handles touch pinch/pan and mouse drag gestures. The visible buttons
+                    // provide an equally discoverable zoom path for desktop and emulator users.
+                    // Translation is deliberately left in pixels: graphicsLayer applies it after
+                    // layout, allowing the image to move within the fixed map viewport.
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(1f, 5f)
+                        offsetX += pan.x
+                        offsetY += pan.y
+                        if (scale == 1f) {
+                            offsetX = 0f
+                            offsetY = 0f
+                        }
+                    }
+                },
+        ) {
+            Image(
+                painter = painter,
+                contentDescription = description,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        // The image is kept inside a clipped viewport so zooming enlarges the map
+                        // without changing the surrounding resource card's layout height.
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = offsetX
+                        translationY = offsetY
+                    },
+            )
+        }
     }
 }
 
 private data class ResourceResult(val resource: CampusResourceEntity, val hours: ResourceHoursEntity?)
 
 private suspend fun CampusDatabase.loadResourceResults(campus: String?, type: String?, query: String): List<ResourceResult> =
-    // The hours lookup is kept beside each resource so cards can render complete building details.
+    // The DAO performs campus/type/name filtering in SQL. The hours lookup is kept beside each
+    // resource so cards can render complete building details without a second UI query.
     campusResourceDao().searchResources(campus, type, query).map { resource ->
         ResourceResult(resource, resourceHoursDao().getHours(resource.resourceId))
     }

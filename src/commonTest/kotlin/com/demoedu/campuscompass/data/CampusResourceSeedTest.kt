@@ -20,7 +20,9 @@ class CampusResourceSeedTest {
             ensureCampusResources(database)
 
             val resources = database.campusResourceDao().observeResources().first()
-            assertTrue(resources.size >= 74)
+            // The current official CSUMB directory contains 54 service/instructional entries,
+            // 14 residence halls, and 5 sports/recreation entries: 73 resources total.
+            assertEquals(73, resources.size)
 
             val library = resources.single { it.buildingNumber == "508" }
             assertEquals("Library", library.resourceType)
@@ -35,7 +37,9 @@ class CampusResourceSeedTest {
 
             ensureCampusMaps(database)
             val maps = database.campusMapDao().observeMaps().first()
-            assertEquals(7, maps.size)
+            // The map catalog is an intentional part of the local fixture. A count change should
+            // force this test to be reviewed rather than silently hiding an omitted campus map.
+            assertEquals(9, maps.size)
             assertTrue(maps.any { it.campusName == "MPC Monterey Campus" })
             assertEquals("campus_map_csumb", maps.single { it.campusName == "CSUMB Main Campus" }.imageResource)
         } finally {
@@ -173,8 +177,8 @@ class CampusResourceSeedTest {
             assertEquals("Tanimura & Antle Family Memorial Library", library.buildingName)
             assertEquals("Library", library.resourceType)
             assertTrue(library.description.contains("Tanimura & Antle Family Memorial Library"))
-            assertEquals(74, resources.size)
-            assertEquals(74, resources.count { database.resourceHoursDao().getHours(it.resourceId) != null })
+            assertEquals(73, resources.size)
+            assertEquals(73, resources.count { database.resourceHoursDao().getHours(it.resourceId) != null })
         } finally {
             database.close()
         }
