@@ -28,6 +28,7 @@ private interface CampusSeedRecord {
     val description: String
     val imageResource: String?
     val officialUrl: String?
+    val aliases: List<String>
     val hours: List<String>
 }
 
@@ -41,6 +42,7 @@ private data class SeedResource(
     override val hours: List<String> = defaultFacilityHours,
     override val campusKey: String = "",
     override val campusName: String = "CSUMB Main Campus",
+    override val aliases: List<String> = emptyList(),
 ) : CampusSeedRecord
 
 private const val campusMapUrl = "https://csumb.edu/media/csumb/documents/external---public-viewable/forms/administration/CampusMapUpdated_ACE.pdf"
@@ -151,6 +153,8 @@ private suspend fun ensureCampusDirectoryResources(
     resources: List<CampusSeedRecord>,
 ) {
     resources.forEach { seed ->
+        // Include the source and campus key in the tag because building numbers are often reused
+        // across campuses. The tag is stable across launches and makes reseeding an update.
         val campusPart = seed.campusKey.takeUnless { it.isBlank() }?.let { "$it-" } ?: ""
         val tag = "$sourceKey-$campusPart${seed.number.lowercase()}-${seed.name.slug()}"
         val existingId = database.campusResourceDao().getResourceIdByTag(tag)
@@ -167,6 +171,16 @@ private suspend fun ensureCampusDirectoryResources(
         )
         val resourceId = existingId ?: database.campusResourceDao().insertResource(resource)
         if (existingId != null) database.campusResourceDao().updateResource(resource)
+        // Seed aliases are authoritative for this local catalog. Replacing only this resource's
+        // aliases keeps reruns deterministic while leaving all other campus rows untouched.
+        database.campusResourceAliasDao().deleteAliasesForResource(resourceId)
+        seed.aliases.distinct().filter { it.isNotBlank() }.forEach { alias ->
+            database.campusResourceAliasDao().insertAlias(
+                CampusResourceAliasEntity(resourceId = resourceId, alias = alias),
+            )
+        }
+        // Hours are inserted only once so a later seed run does not erase locally maintained
+        // schedule changes. The resource metadata above is still refreshed on every run.
         if (database.resourceHoursDao().getHoursResourceId(resourceId) == null) {
             database.resourceHoursDao().insertHours(
                 ResourceHoursEntity(
@@ -192,6 +206,8 @@ private suspend fun ensureCampusDirectoryResources(
  */
 suspend fun ensureCampusMaps(database: CampusDatabase) {
     campusMaps.forEach { seed ->
+        // The unique campus/type index gives each map a stable logical key while allowing its
+        // image resource or official URL to be corrected safely on the next app launch.
         val existingId = database.campusMapDao().getMapId(seed.campusName, seed.mapType)
         val map = CampusMapEntity(
             mapId = existingId ?: 0,
@@ -219,6 +235,7 @@ private data class MpcSeedResource(
     override val description: String = "",
     override val hours: List<String> = defaultFacilityHours,
     override val imageResource: String? = null,
+    override val aliases: List<String> = emptyList(),
 ) : CampusSeedRecord
 
 private data class CabrilloSeedResource(
@@ -231,6 +248,7 @@ private data class CabrilloSeedResource(
     override val description: String = "",
     override val hours: List<String> = defaultFacilityHours,
     override val imageResource: String? = null,
+    override val aliases: List<String> = emptyList(),
 ) : CampusSeedRecord
 
 private data class CampusDirectorySeedResource(
@@ -243,6 +261,7 @@ private data class CampusDirectorySeedResource(
     override val description: String = "",
     override val hours: List<String> = defaultFacilityHours,
     override val imageResource: String? = null,
+    override val aliases: List<String> = emptyList(),
 ) : CampusSeedRecord
 
 private data class CampusMapSeed(
@@ -268,7 +287,7 @@ private val hartnellTutoringHours = listOf("10 AM–6 PM", "10 AM–6 PM", "10 A
 private val ucscWeekdayHours = listOf("8 AM–5 PM", "8 AM–5 PM", "8 AM–5 PM", "8 AM–5 PM", "8 AM–5 PM", "Closed", "Closed")
 
 private val mpcResources = listOf(
-    MpcSeedResource("monterey", "MPC Monterey Campus", "Welcome Center", "10", "Student Support", mpcCampusLifeUrl),
+    MpcSeedResource("monterey", "MPC Monterey Campus", "Welcome Center", "10", "Student Support", mpcCampusLifeUrl, aliases = listOf("Building 10")),
     MpcSeedResource("monterey", "MPC Monterey Campus", "Administration Building", "11", "Administration / Services", mpcStudentServicesUrl),
     MpcSeedResource("monterey", "MPC Monterey Campus", "Library and Technology Center", "16", "Library", mpcLibraryUrl, hours = mpcLibraryHours),
     MpcSeedResource("monterey", "MPC Monterey Campus", "Student Services Building", "22", "Student Support", mpcStudentServicesUrl),
@@ -303,7 +322,7 @@ private val cabrilloResources = listOf(
     CabrilloSeedResource("aptos", "Cabrillo Aptos Campus", "Business, English, Language Arts", "300", "Academic Building", null),
     CabrilloSeedResource("aptos", "Cabrillo Aptos Campus", "Computer Information Systems", "800", "Academic Building", null),
     CabrilloSeedResource("aptos", "Cabrillo Aptos Campus", "Cafeteria", "900", "Dining", null),
-    CabrilloSeedResource("aptos", "Cabrillo Aptos Campus", "Swenson Library", "1000", "Library", cabrilloLibraryHoursUrl, hours = cabrilloLibraryHours),
+    CabrilloSeedResource("aptos", "Cabrillo Aptos Campus", "Swenson Library", "1000", "Library", cabrilloLibraryHoursUrl, hours = cabrilloLibraryHours, aliases = listOf("Library", "Learning Resources Center", "LRC", "Library and TLC")),
     CabrilloSeedResource("aptos", "Cabrillo Aptos Campus", "Tutoring HUB", "1000", "Academic Support", cabrilloTutoringUrl, hours = cabrilloHubHours),
     CabrilloSeedResource("aptos", "Cabrillo Aptos Campus", "STEM Center", "834", "Academic Support", cabrilloLearningCentersUrl),
     CabrilloSeedResource("aptos", "Cabrillo Aptos Campus", "Student Health Services", "912", "Health & Wellness", cabrilloHealthUrl, hours = cabrilloHealthHours),
@@ -326,7 +345,7 @@ private val cabrilloResources = listOf(
 
 // Sources: Gavilan's campus map, Learning Commons page, and LSRC announcement.
 private val gavilanResources = listOf(
-    CampusDirectorySeedResource("gilroy", "Gavilan Gilroy Campus", "Library and Student Resource Center", "LSRC", "Library / Student Support", gavilanLsrcNewsUrl, "New shared library and student-services building; the official announcement describes its phased opening.", gavilanWeekdayHours),
+    CampusDirectorySeedResource("gilroy", "Gavilan Gilroy Campus", "Library and Student Resource Center", "LSRC", "Library / Student Support", gavilanLsrcNewsUrl, "New shared library and student-services building; the official announcement describes its phased opening.", gavilanWeekdayHours, aliases = listOf("LSRC")),
     CampusDirectorySeedResource("gilroy", "Gavilan Gilroy Campus", "Student Center / Administration", "SC", "Student Support"),
     CampusDirectorySeedResource("gilroy", "Gavilan Gilroy Campus", "Tutoring Center", "LI", "Academic Support", gavilanLearningCommonsUrl),
     CampusDirectorySeedResource("gilroy", "Gavilan Gilroy Campus", "Career / Transfer Center", "SC", "Student Support"),
@@ -344,7 +363,7 @@ private val gavilanResources = listOf(
 
 // Sources: Hartnell's detailed building maps, library, facilities, tutoring, and student guide pages.
 private val hartnellResources = listOf(
-    CampusDirectorySeedResource("main", "Hartnell Main Campus", "Library / Learning Resource Center", "A", "Library", hartnellLibraryUrl, hours = hartnellLibraryHours),
+    CampusDirectorySeedResource("main", "Hartnell Main Campus", "Library / Learning Resource Center", "A", "Library", hartnellLibraryUrl, hours = hartnellLibraryHours, aliases = listOf("Library", "Learning Resource Center")),
     CampusDirectorySeedResource("main", "Hartnell Main Campus", "Student Services", "B", "Student Support", hartnellGuideUrl),
     CampusDirectorySeedResource("main", "Hartnell Main Campus", "Student Center", "C", "Student Life"),
     CampusDirectorySeedResource("main", "Hartnell Main Campus", "College Administration North", "D", "Administration / Services"),
@@ -359,9 +378,9 @@ private val hartnellResources = listOf(
     CampusDirectorySeedResource("main", "Hartnell Main Campus", "Nursing and Health Sciences", "O", "Academic Building"),
     CampusDirectorySeedResource("main", "Hartnell Main Campus", "Welcome Center", "R", "Student Support"),
     CampusDirectorySeedResource("main", "Hartnell Main Campus", "Planetarium", "S", "Arts & Events"),
-    CampusDirectorySeedResource("main", "Hartnell Main Campus", "STEM Center", "S", "Academic Support"),
+    CampusDirectorySeedResource("main", "Hartnell Main Campus", "STEM Center", "S", "Academic Support", aliases = listOf("STEM Building")),
     CampusDirectorySeedResource("main", "Hartnell Main Campus", "Campus Safety", "T", "Public Safety"),
-    CampusDirectorySeedResource("main", "Hartnell Main Campus", "Panther Learning Lab", "B230", "Academic Support", hartnellTutoringUrl, hours = hartnellTutoringHours),
+    CampusDirectorySeedResource("main", "Hartnell Main Campus", "Panther Learning Lab", "B230", "Academic Support", hartnellTutoringUrl, hours = hartnellTutoringHours, aliases = listOf("PLL", "Tutoring")),
     CampusDirectorySeedResource("main", "Hartnell Main Campus", "Facilities Services", "Facilities", "Facilities", hartnellFacilitiesUrl),
     CampusDirectorySeedResource("alisal", "Hartnell Alisal Campus", "Alisal Campus", "Alisal", "Education Center"),
     CampusDirectorySeedResource("king-city", "Hartnell King City Education Center", "King City Education Center", "KCEC", "Education Center", "https://www.hartnell.edu/kcec/"),
@@ -371,7 +390,7 @@ private val hartnellResources = listOf(
 
 // Sources: UCSC's campus maps, University Library, Cowell Health Center, and campus transit pages.
 private val ucscResources = listOf(
-    CampusDirectorySeedResource("main", "UC Santa Cruz Main Campus", "McHenry Library", "McHenry", "Library", ucscLibraryUrl),
+    CampusDirectorySeedResource("main", "UC Santa Cruz Main Campus", "McHenry Library", "McHenry", "Library", ucscLibraryUrl, aliases = listOf("McHenry")),
     CampusDirectorySeedResource("main", "UC Santa Cruz Main Campus", "Cowell Student Health Center", "Cowell", "Health & Wellness", ucscHealthUrl),
     CampusDirectorySeedResource("main", "UC Santa Cruz Main Campus", "Campus Transit", "TAPS", "Transportation", ucscTransitUrl),
     CampusDirectorySeedResource("main", "UC Santa Cruz Main Campus", "Cowell College", "Cowell", "Residential College"),
@@ -385,7 +404,7 @@ private val ucscResources = listOf(
     CampusDirectorySeedResource("main", "UC Santa Cruz Main Campus", "College Nine", "College Nine", "Residential College"),
     CampusDirectorySeedResource("main", "UC Santa Cruz Main Campus", "College Ten", "College Ten", "Residential College"),
     CampusDirectorySeedResource("main", "UC Santa Cruz Main Campus", "Physical Sciences Building", "PSB", "Academic Building"),
-    CampusDirectorySeedResource("main", "UC Santa Cruz Main Campus", "Science and Engineering Library", "SEL", "Library", ucscLibraryUrl),
+    CampusDirectorySeedResource("main", "UC Santa Cruz Main Campus", "Science and Engineering Library", "SEL", "Library", ucscLibraryUrl, aliases = listOf("S&E Library", "Science & Engineering Library")),
 )
 
 /**
@@ -438,14 +457,16 @@ private val campusMapResources = listOf(
     SeedResource("Oaks Hall Storage", "690", "Facilities"),
     SeedResource("Ocean Hall", "86", "Academic Building"),
     SeedResource("Otter Express", "14", "Dining"),
-    SeedResource("Otter Student Union", "552", "Student Life", officialUrl = studentUnionUrl),
+    SeedResource("Otter Student Union", "552", "Student Life", officialUrl = studentUnionUrl, aliases = listOf("OSU")),
     SeedResource("Pacific Hall", "44", "Academic Building"),
     SeedResource("Playa", "2", "Academic Building"),
     SeedResource("Reading Center", "59", "Student Support"),
     SeedResource("Sand Hall", "8", "Academic Building"),
     SeedResource("Science Instructional Lab Annex", "50", "Academic Building"),
     SeedResource("Science Research Lab Annex", "13", "Academic Building"),
-    SeedResource("Student Center", "12", "Student Life"),
+    // CSUMB's current public event materials call Building 12 Redwood Hall; retain Student
+    // Center as the formal map name and make the public alias searchable.
+    SeedResource("Student Center", "12", "Student Life", aliases = listOf("Redwood Hall")),
     SeedResource("Student Services", "47", "Student Support"),
     SeedResource("Surf Hall", "6", "Academic Building"),
     SeedResource("Tanimura & Antle Family Memorial Library", "508", "Library", officialUrl = libraryUrl, hours = libraryHours),

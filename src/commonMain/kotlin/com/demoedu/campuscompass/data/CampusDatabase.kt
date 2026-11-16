@@ -9,12 +9,13 @@ import androidx.room3.RoomDatabase
     entities = [
         UserEntity::class,
         CampusResourceEntity::class,
+        CampusResourceAliasEntity::class,
         ResourceHoursEntity::class,
         ScheduleEntity::class,
         CampusMapEntity::class,
     ],
-    // Version 7 adds campus-wide maps alongside individual resource records.
-    version = 7,
+    // Version 9 adds a campus lookup index for fast campus-scoped searches.
+    version = 9,
     exportSchema = true,
 )
 @ConstructedBy(CampusDatabaseConstructor::class)
@@ -22,6 +23,7 @@ abstract class CampusDatabase : RoomDatabase() {
     // Each DAO keeps one entity's reads and writes together.
     abstract fun userDao(): UserDao
     abstract fun campusResourceDao(): CampusResourceDao
+    abstract fun campusResourceAliasDao(): CampusResourceAliasDao
     abstract fun resourceHoursDao(): ResourceHoursDao
     abstract fun scheduleDao(): ScheduleDao
     abstract fun campusMapDao(): CampusMapDao

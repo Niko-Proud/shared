@@ -7,7 +7,12 @@ import androidx.room3.PrimaryKey
 /** Stores the building and resource details shown by the campus search screen. */
 @Entity(
     tableName = "CampusResources",
-    indices = [Index(value = ["resourceTag"], unique = true)],
+    indices = [
+        Index(value = ["resourceTag"], unique = true),
+        // Campus-scoped searches are the primary directory query, so let SQLite narrow by campus
+        // before it evaluates building names, numbers, or aliases.
+        Index(value = ["campusName"]),
+    ],
 )
 data class CampusResourceEntity(
     @PrimaryKey(autoGenerate = true)

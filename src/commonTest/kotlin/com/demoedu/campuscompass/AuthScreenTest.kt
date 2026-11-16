@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import com.demoedu.campuscompass.data.UserEntity
 import com.demoedu.campuscompass.data.createInMemoryCampusDatabase
 import kotlinx.coroutines.test.runTest
@@ -38,7 +39,8 @@ class AuthScreenTest {
                 onNodeWithText("Username or password is incorrect.").assertIsDisplayed()
                 assertEquals(null, signedInId)
 
-                onNodeWithTag("login_password").performTextInput("secret")
+                // Replace the deliberately wrong password instead of appending to it.
+                onNodeWithTag("login_password").performTextReplacement("secret")
                 onNodeWithTag("login_submit").performClick()
                 waitForIdle()
                 assertEquals(expectedId, signedInId)

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!--
+            Compose's runComposeUiTest launches a temporary activity for setContent. The shared
+            device-test APK has no app activity of its own, so register the framework activity
+            explicitly instead of relying on the outer Android application manifest.
+        -->
+        <activity
+            android:name="androidx.activity.ComponentActivity"
+            android:exported="true" />
+    </application>
+</manifest>

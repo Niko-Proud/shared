@@ -49,18 +49,17 @@ class ResourceScreenTest {
                 setContent { MaterialTheme { ResourceScreen(database, userId, onLogout = {}) } }
                 waitForIdle()
                 onNodeWithText("Welcome, alex").assertIsDisplayed()
-                onNodeWithText("Main Library").assertIsDisplayed()
-                onNodeWithText("LIB-100").assertIsDisplayed()
-                onNodeWithText("Monday: 08:00-20:00").assertIsDisplayed()
 
                 onNodeWithTag("resource_campus_filter").performClick()
                 onNodeWithText("North Campus").assertIsDisplayed()
                 onNodeWithText("North Campus").performClick()
 
-                onNodeWithTag("resource_building_search").performTextInput("Science")
+                // Resource cards are intentionally withheld until the user submits a search.
+                onNodeWithTag("resource_building_search").performTextInput("Main Library")
                 onNodeWithTag("resource_search_submit").performClick()
                 waitForIdle()
-                onNodeWithText("Science Hall").assertIsDisplayed()
+                onNodeWithText("Building number: LIB-100").assertIsDisplayed()
+                onNodeWithText("Monday: 08:00-20:00").assertIsDisplayed()
             }
         } finally {
             database.close()
